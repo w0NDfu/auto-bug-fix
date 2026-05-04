@@ -1,3 +1,7 @@
 fastapi
 uvicorn
 pytest
+pydantic
+scikit-learn
+requests
+openai>=1.0.0

@@ -1,19 +1,39 @@
-def generate_patch(context):
-    func = context["function"]
+from backend.llm.factory import get_llm
 
-    patch = f"""
-def {func}(a, b):
-    if b == 0:
-        return 0
-    return a / b
+SYSTEM_PROMPT = """You are a senior software engineer.
+Given error logs and code context, produce:
+1) A minimal PATCH (full file content) that fixes the bug
+2) Pytest TESTS to validate the fix
+Return in format:
+
+PATCH:
+<python code>
+
+TESTS:
+<python test code>
 """
 
-    test_code = """
-from buggy_code import divide
+def generate_patch(state, context):
+    llm = get_llm()
+    user = f"Log: {state.log}\nHints: {state.hints}\nContext:\n" + "\n\n".join(context.get("docs", []))
+    out = llm.chat(SYSTEM_PROMPT, user)
 
-def test_divide():
-    assert divide(4,2) == 2
-    assert divide(4,0) == 0
-"""
+    patch, tests = parse_sections(out)
+    return patch, tests
 
-    return patch, test_code
+def parse_sections(text: str):
+    patch = ""
+    tests = ""
+    cur = None
+    for line in text.splitlines():
+        if line.strip().startswith("PATCH:"):
+            cur = "patch"
+            continue
+        if line.strip().startswith("TESTS:"):
+            cur = "tests"
+            continue
+        if cur == "patch":
+            patch += line + "\n"
+        elif cur == "tests":
+            tests += line + "\n"
+    return patch.strip() or "# no-op", tests.strip() or "# no-op"

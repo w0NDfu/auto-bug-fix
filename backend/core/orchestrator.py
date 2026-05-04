@@ -1,20 +1,38 @@
+import os
+from backend.agents.planner import plan_task
 from backend.agents.locator import locate_bug
+from backend.agents.retriever import retrieve
 from backend.agents.coder import generate_patch
-from backend.agents.validator import run_tests
-from backend.agents.reflector import reflect_and_fix
+from backend.agents.tester import run_tests
+from backend.agents.reflector import reflect
+from backend.memory.state import State
 
-MAX_RETRY = 3
+MAX_ITER = int(os.getenv("MAX_ITER", "5"))
 
-def run_pipeline(log):
-    context = locate_bug(log)
+def run_pipeline(log: str):
+    state = State(log)
+    plan = plan_task(log)
 
-    for _ in range(MAX_RETRY):
-        patch, test_code = generate_patch(context)
-        success, error = run_tests(patch, test_code)
+    for i in range(MAX_ITER):
+        loc_ctx = locate_bug(state, plan)
+        ret_ctx = retrieve(state, loc_ctx)
+        patch, tests = generate_patch(state, ret_ctx)
 
-        if success:
-            return {"status": "fixed", "patch": patch}
+        ok, out = run_tests(patch, tests)
+        state.add_history({"iter": i, "ok": ok, "out": out[:500]})
 
-        context = reflect_and_fix(context, error)
+        if ok:
+            return {
+                "status": "fixed",
+                "iterations": i + 1,
+                "patch": patch,
+                "tests": tests
+            }
 
-    return {"status": "failed", "reason": error}
+        state = reflect(state, out)
+
+    return {
+        "status": "failed",
+        "history": state.history,
+        "hints": state.hints
+    }
