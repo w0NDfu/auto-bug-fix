@@ -3,6 +3,10 @@
 The target architecture keeps the useful multi-agent responsibilities while
 moving factual analysis and safety checks into typed, deterministic services.
 
+The current Issue #2 increment implements only the first boundary in this
+direction: `RepositoryWorkspace` can inspect an existing local Git repository
+without connecting it to the LLM repair loop.
+
 ```text
 Issue / failure / CI error / traceback
                  -> RepairRequest -> FailureEvidence
@@ -50,5 +54,6 @@ The implementation proceeds from the educational MVP to an OSS foundation,
 then repository-level evidence and structured patches, deterministic
 validation, isolated execution, auditability, GitHub maintainer workflows, and
 finally reproducible evaluation. Current files do not yet implement the target
-architecture; see `ROADMAP.md` for staged work.
+repair architecture; the workspace is currently inspection-only. See
+`ROADMAP.md` for staged work.
 

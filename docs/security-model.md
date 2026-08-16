@@ -13,6 +13,19 @@ enforce that boundary. Do not run it with untrusted generated code.
 The foundation phase makes this risk visible in documentation and contributor
 guidance. It does not pretend to deliver isolation ahead of the sandbox issue.
 
+## IMPLEMENTED REPOSITORY INSPECTION CONTROLS
+
+The Issue #2 RepositoryWorkspace layer now provides a narrower inspection
+boundary: Git root resolution, bounded deterministic Python enumeration,
+path-aware containment checks, symlink target checks, conservative sensitive
+file exclusions, UTF-8 reads, file/file-count limits, and read-only Git-state
+inspection. Git commands use explicit working directories, captured output,
+timeouts, and no shell execution.
+
+These controls protect inspection operations only. They do not validate patches,
+run repository tests, isolate processes, or make the existing MVP repair loop
+safe.
+
 ## TARGET SECURITY MODEL
 
 The target repair engine will:

@@ -16,7 +16,9 @@ execution, and limited tests.
 
 Proper package and CLI, CI, `RepositoryWorkspace`, structured failure evidence,
 basic evidence-based Python localization, `PatchProposal`, deterministic
-validation, and an audit-ready domain model.
+validation, and an audit-ready domain model. The current Issue #2 increment
+delivers read-only local repository inspection; repair integration remains
+future work.
 
 ### Stage C — Safe v0.2 repair engine
 
