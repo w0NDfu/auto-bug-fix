@@ -65,7 +65,8 @@ validation, and audit reports are planned, not implemented.
 
 `inspect-repo` improves the safety of local inspection through path containment,
 symlink checks, sensitive-file exclusions, and resource bounds, but it does not
-make the overall MVP repair loop safe.
+make the overall MVP repair loop safe. Its source-file limit does not yet impose
+a separate global directory-entry or traversal-time budget.
 
 ## Inspect a local repository
 

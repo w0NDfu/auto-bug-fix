@@ -24,7 +24,9 @@ timeouts, and no shell execution.
 
 These controls protect inspection operations only. They do not validate patches,
 run repository tests, isolate processes, or make the existing MVP repair loop
-safe.
+safe. The source-file limit bounds eligible Python files, but total directory
+traversal entries and scan time are not yet governed by a separate global
+budget.
 
 ## TARGET SECURITY MODEL
 

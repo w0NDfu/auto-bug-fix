@@ -123,6 +123,13 @@ _IGNORED_DIRECTORIES = frozenset(
 _SENSITIVE_NAMES = (".env", ".env.*", "*.pem", "*.key", "id_rsa", "id_ed25519")
 _WINDOWS_DRIVE = re.compile(r"^[A-Za-z]:")
 _GIT_TIMEOUT_SECONDS = 5
+_GIT_INSPECTION_OPTIONS = (
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "core.untrackedCache=false",
+    "--no-optional-locks",
+)
 
 
 class RepositoryWorkspace:
@@ -160,7 +167,13 @@ class RepositoryWorkspace:
 
         base_commit = cls._git_value(root, "rev-parse", "HEAD", allow_failure=True)
         branch = cls._git_value(root, "symbolic-ref", "--quiet", "--short", "HEAD", allow_failure=True)
-        status = cls._run_git(root, "status", "--porcelain", "--untracked-files=normal")
+        status = cls._run_git(
+            root,
+            "status",
+            "--porcelain",
+            "--untracked-files=normal",
+            "--ignore-submodules=all",
+        )
         state = RepositoryState(
             is_git_repository=True,
             base_commit=base_commit or None,
@@ -174,7 +187,7 @@ class RepositoryWorkspace:
     def _run_git(cwd: Path, *args: str) -> str:
         try:
             result = subprocess.run(
-                ["git", *args],
+                ["git", *_GIT_INSPECTION_OPTIONS, *args],
                 cwd=cwd,
                 capture_output=True,
                 check=False,
@@ -212,17 +225,18 @@ class RepositoryWorkspace:
         if PurePosixPath(portable).is_absolute() or PureWindowsPath(raw).is_absolute() or _WINDOWS_DRIVE.match(raw):
             if _WINDOWS_DRIVE.match(raw) and os.name != "nt":
                 raise PathOutsideWorkspaceError(f"Windows absolute path is not valid here: {raw}")
-            candidate = Path(raw).expanduser().resolve(strict=False)
-            self._assert_contained(candidate)
-            return candidate.relative_to(self.root).as_posix()
+            lexical_candidate = Path(os.path.abspath(os.fspath(Path(raw).expanduser())))
+            self._assert_contained(lexical_candidate)
+            self._assert_contained(lexical_candidate.resolve(strict=False))
+            return lexical_candidate.relative_to(self.root).as_posix()
         relative = PurePosixPath(portable)
         if any(part == ".." for part in relative.parts):
             raise PathOutsideWorkspaceError(f"path escapes repository root: {raw}")
         if relative == PurePosixPath(".") or not relative.parts:
             raise UnsupportedFileError("a repository-relative file path is required")
-        candidate = (self.root.joinpath(*relative.parts)).resolve(strict=False)
-        self._assert_contained(candidate)
-        return candidate.relative_to(self.root).as_posix()
+        lexical_candidate = self.root.joinpath(*relative.parts)
+        self._assert_contained(lexical_candidate.resolve(strict=False))
+        return relative.as_posix()
 
     def read_text(self, relative_path: str | os.PathLike[str]) -> str:
         """Read one approved UTF-8 source file without executing it."""
@@ -231,24 +245,9 @@ class RepositoryWorkspace:
         if PurePosixPath(raw.replace("\\", "/")).is_absolute() or PureWindowsPath(raw).is_absolute() or _WINDOWS_DRIVE.match(raw):
             raise PathOutsideWorkspaceError("read_text accepts repository-relative paths only")
         safe_relative = self.relative_path(relative_path)
-        path = (self.root / Path(*PurePosixPath(safe_relative).parts)).resolve(strict=False)
-        self._assert_contained(path)
-        self._check_file_policy(path, safe_relative)
-        try:
-            size = path.stat().st_size
-        except OSError as exc:
-            raise RepositoryReadError(f"cannot stat repository file: {safe_relative}") from exc
-        if size > self.policy.max_file_size:
-            raise WorkspaceLimitError(
-                f"file exceeds max_file_size ({self.policy.max_file_size} bytes): {safe_relative}"
-            )
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (OSError, UnicodeDecodeError) as exc:
-            raise RepositoryReadError(f"cannot read UTF-8 source file: {safe_relative}") from exc
-        if "\x00" in text:
-            raise UnsupportedFileError(f"file is not text: {safe_relative}")
-        return text
+        lexical_path = self.root.joinpath(*PurePosixPath(safe_relative).parts)
+        resolved_path = self._validate_file_pair(lexical_path, safe_relative)
+        return self._read_bounded_text(resolved_path, safe_relative)
 
     def list_source_files(self) -> list[RepositoryFile]:
         """Enumerate bounded, deterministic Python source files."""
@@ -291,30 +290,33 @@ class RepositoryWorkspace:
             for name in sorted(names):
                 path = current / name
                 relative = path.relative_to(self.root).as_posix()
-                if self._is_ignored_file(name, relative) or path.is_symlink() and not self._symlink_is_contained(path):
+                if self._is_ignored_file(name, relative):
                     ignored_entries += 1
-                    if path.is_symlink() and not self._symlink_is_contained(path):
-                        warnings.append(f"ignored symlink outside workspace: {relative}")
                     continue
                 if path.suffix.lower() != ".py":
                     ignored_entries += 1
                     continue
-                if not self._is_text_file(path):
+                try:
+                    resolved_path = self._validate_file_pair(path, relative)
+                except PathOutsideWorkspaceError:
                     ignored_entries += 1
-                    warnings.append(f"ignored non-text Python file: {relative}")
+                    warnings.append(f"ignored symlink outside workspace: {relative}")
+                    continue
+                except UnsupportedFileError as exc:
+                    ignored_entries += 1
+                    warnings.append(str(exc))
                     continue
                 try:
-                    size = path.stat().st_size
-                except OSError as exc:
-                    warnings.append(f"could not stat source file: {relative} ({exc})")
-                    continue
-                if size > self.policy.max_file_size:
+                    text = self._read_bounded_text(resolved_path, relative)
+                except WorkspaceLimitError as exc:
                     ignored_entries += 1
-                    warnings.append(
-                        f"ignored oversized source file: {relative} "
-                        f"(limit {self.policy.max_file_size} bytes)"
-                    )
+                    warnings.append(str(exc))
                     continue
+                except (RepositoryReadError, UnsupportedFileError) as exc:
+                    ignored_entries += 1
+                    warnings.append(str(exc))
+                    continue
+                size = len(text.encode("utf-8"))
                 files.append(RepositoryFile(relative_path=relative, size=size))
                 if len(files) > self.policy.max_source_files:
                     raise WorkspaceLimitError(
@@ -331,6 +333,39 @@ class RepositoryWorkspace:
                 f"path is outside repository root {self.root}: {candidate}"
             ) from exc
 
+    def _validate_file_pair(self, lexical_path: Path, lexical_relative: str) -> Path:
+        """Validate both the user-visible path and its resolved target."""
+
+        if self._is_ignored_directory_path(lexical_relative) or self._is_ignored_file(
+            lexical_path.name, lexical_relative
+        ):
+            raise UnsupportedFileError(f"file is excluded by policy: {lexical_relative}")
+        if lexical_path.suffix.lower() != ".py":
+            raise UnsupportedFileError(
+                f"only UTF-8 Python source files are readable: {lexical_relative}"
+            )
+        if not lexical_path.exists() or not lexical_path.is_file():
+            raise RepositoryReadError(f"repository file does not exist: {lexical_relative}")
+        try:
+            resolved_path = lexical_path.resolve(strict=True)
+        except OSError as exc:
+            raise RepositoryReadError(f"cannot resolve repository file: {lexical_relative}") from exc
+        self._assert_contained(resolved_path)
+        resolved_relative = resolved_path.relative_to(self.root).as_posix()
+        if self._is_ignored_directory_path(resolved_relative) or self._is_ignored_file(
+            resolved_path.name, resolved_relative
+        ):
+            raise UnsupportedFileError(
+                f"resolved target is excluded by policy: {lexical_relative}"
+            )
+        if resolved_path.suffix.lower() != ".py":
+            raise UnsupportedFileError(
+                f"resolved target is not Python source: {lexical_relative}"
+            )
+        if not resolved_path.is_file():
+            raise RepositoryReadError(f"repository file is not regular: {lexical_relative}")
+        return resolved_path
+
     def _symlink_is_contained(self, path: Path) -> bool:
         try:
             target = path.resolve(strict=True)
@@ -342,29 +377,36 @@ class RepositoryWorkspace:
             return False
         return True
 
-    def _check_file_policy(self, path: Path, relative: str) -> None:
-        if self._is_ignored_file(path.name, relative):
-            raise UnsupportedFileError(f"file is excluded by sensitive-file policy: {relative}")
-        if not path.exists() or not path.is_file():
-            raise RepositoryReadError(f"repository file does not exist: {relative}")
-        if path.suffix.lower() != ".py":
-            raise UnsupportedFileError(f"only UTF-8 Python source files are readable: {relative}")
-        if path.is_symlink() and not self._symlink_is_contained(path):
-            raise PathOutsideWorkspaceError(f"symlink escapes repository root: {relative}")
+    def _read_bounded_bytes(self, path: Path, relative: str) -> bytes:
+        """Read at most max_file_size plus one byte from a source file."""
 
-    @staticmethod
-    def _is_text_file(path: Path) -> bool:
         try:
-            sample = path.read_bytes()[:8192]
-        except OSError:
-            return False
-        if b"\x00" in sample:
-            return False
+            with path.open("rb") as handle:
+                data = handle.read(self.policy.max_file_size + 1)
+        except OSError as exc:
+            raise RepositoryReadError(f"cannot read repository file: {relative}") from exc
+        if len(data) > self.policy.max_file_size:
+            raise WorkspaceLimitError(
+                f"file exceeds max_file_size ({self.policy.max_file_size} bytes): {relative}"
+            )
+        if b"\x00" in data:
+            raise UnsupportedFileError(f"file is not text: {relative}")
+        return data
+
+    def _read_bounded_text(self, path: Path, relative: str) -> str:
+        data = self._read_bounded_bytes(path, relative)
         try:
-            sample.decode("utf-8")
-        except UnicodeDecodeError:
-            return False
-        return True
+            return data.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RepositoryReadError(f"cannot read UTF-8 source file: {relative}") from exc
+
+    def _is_ignored_directory_path(self, relative: str) -> bool:
+        parts = PurePosixPath(relative).parts
+        for index, part in enumerate(parts[:-1]):
+            prefix = PurePosixPath(*parts[: index + 1]).as_posix()
+            if part in _IGNORED_DIRECTORIES or self._matches_additional_pattern(part, prefix):
+                return True
+        return False
 
     def _is_ignored_directory(self, name: str, relative: str) -> bool:
         return name in _IGNORED_DIRECTORIES or self._matches_additional_pattern(name, relative)

@@ -1,4 +1,6 @@
 import json
+import os
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -120,7 +122,8 @@ def test_read_text_is_utf8_bounded_and_read_only(tmp_path):
     before = run_git(repository, "status", "--porcelain", "--untracked-files=all")
     workspace = RepositoryWorkspace.open(repository)
 
-    assert workspace.read_text("src/main.py") == "VALUE = 1\n"
+    expected = (repository / "src" / "main.py").read_bytes().decode("utf-8")
+    assert workspace.read_text("src/main.py") == expected
     with pytest.raises(UnsupportedFileError):
         workspace.read_text(".env")
     with pytest.raises(RepositoryReadError):
@@ -128,6 +131,96 @@ def test_read_text_is_utf8_bounded_and_read_only(tmp_path):
 
     after = run_git(repository, "status", "--porcelain", "--untracked-files=all")
     assert after == before
+
+
+def test_git_status_does_not_rewrite_index_after_tracked_mtime_change(tmp_path):
+    repository = make_repository(tmp_path)
+    index = repository / ".git" / "index"
+    tracked = repository / "src" / "main.py"
+    index_before = index.read_bytes()
+    index_stat_before = index.stat()
+    tracked_stat = tracked.stat()
+    os.utime(
+        tracked,
+        ns=(tracked_stat.st_atime_ns, tracked_stat.st_mtime_ns + 10_000_000),
+    )
+
+    RepositoryWorkspace.open(repository).summary()
+
+    index_stat_after = index.stat()
+    assert index.read_bytes() == index_before
+    assert index_stat_after.st_mtime_ns == index_stat_before.st_mtime_ns
+    assert index_stat_after.st_size == index_stat_before.st_size
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fsmonitor hook test")
+def test_repository_fsmonitor_command_is_not_executed(tmp_path):
+    repository = make_repository(tmp_path)
+    marker = tmp_path / "fsmonitor-ran"
+    hook = tmp_path / "fsmonitor-hook.sh"
+    hook.write_text(
+        "#!/bin/sh\n"
+        f"printf ran > {shlex.quote(str(marker))}\n",
+        encoding="utf-8",
+    )
+    hook.chmod(0o755)
+    run_git(repository, "config", "core.fsmonitor", str(hook))
+
+    RepositoryWorkspace.open(repository).summary()
+
+    assert not marker.exists()
+
+
+def test_oversized_source_uses_bounded_reads(monkeypatch, tmp_path):
+    repository = make_repository(tmp_path)
+    policy = WorkspacePolicy(max_file_size=4)
+    workspace = RepositoryWorkspace.open(repository, policy)
+
+    def fail_if_unbounded_read(_path):
+        pytest.fail("Path.read_bytes() must not be used for source inspection")
+
+    monkeypatch.setattr(Path, "read_bytes", fail_if_unbounded_read)
+    summary = workspace.summary()
+
+    assert summary.eligible_python_files == 0
+    with pytest.raises(WorkspaceLimitError):
+        workspace.read_text("src/main.py")
+
+
+def test_invalid_utf8_after_byte_8192_is_rejected_consistently(tmp_path):
+    repository = make_repository(tmp_path)
+    late_invalid = repository / "src" / "late_invalid.py"
+    late_invalid.write_bytes(b"a" * 9000 + b"\xff")
+    workspace = RepositoryWorkspace.open(repository)
+
+    assert "src/late_invalid.py" not in [
+        item.relative_path for item in workspace.list_source_files()
+    ]
+    with pytest.raises(RepositoryReadError):
+        workspace.read_text("src/late_invalid.py")
+
+
+def test_internal_symlink_targets_must_pass_target_and_lexical_policies(tmp_path):
+    repository = make_repository(tmp_path)
+    source = repository / "src"
+    try:
+        (source / "env_alias.py").symlink_to(Path("..") / ".env")
+        (source / "key_alias.py").symlink_to(Path("..") / "private.pem")
+        (source / "custom_alias.py").symlink_to("main.py")
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"symlink creation is unavailable in this environment: {exc}")
+    workspace = RepositoryWorkspace.open(
+        repository,
+        WorkspacePolicy(additional_ignore_patterns=("src/custom_alias.py",)),
+    )
+
+    paths = [item.relative_path for item in workspace.list_source_files()]
+    assert "src/env_alias.py" not in paths
+    assert "src/key_alias.py" not in paths
+    assert "src/custom_alias.py" not in paths
+    for alias in ("src/env_alias.py", "src/key_alias.py", "src/custom_alias.py"):
+        with pytest.raises(UnsupportedFileError):
+            workspace.read_text(alias)
 
 
 def test_containment_rejects_traversal_absolute_paths_and_similar_siblings(tmp_path):
@@ -157,7 +250,7 @@ def test_size_limits_fail_explicitly_and_warn_during_enumeration(tmp_path):
         workspace.read_text("src/main.py")
     summary = workspace.summary()
     assert summary.eligible_python_files == 0
-    assert any("oversized" in warning for warning in summary.warnings)
+    assert any("exceeds max_file_size" in warning for warning in summary.warnings)
 
 
 def test_file_count_limit_fails_explicitly(tmp_path):
@@ -183,6 +276,8 @@ def test_symlink_policy_handles_internal_and_external_targets(tmp_path):
 
     assert "src/internal.py" in paths
     assert "src/external.py" not in paths
+    assert workspace.relative_path("src/internal.py") == "src/internal.py"
+    assert workspace.relative_path(repository / "src" / "internal.py") == "src/internal.py"
     assert workspace.read_text("src/internal.py") == "VALUE = 1\n"
     with pytest.raises(PathOutsideWorkspaceError):
         workspace.read_text("src/external.py")
