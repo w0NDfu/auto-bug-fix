@@ -52,20 +52,17 @@ can be implemented independently.
 
 ## Roadmap issues
 
-The twelve substantive milestones are tracked in GitHub. Issue numbers and
-links are recorded here after reconciliation with the remote repository.
+The twelve substantive milestones are tracked in GitHub:
 
-The intended issue set is:
-
-1. `chore: establish open-source engineering foundation`
-2. `feat: support arbitrary local repositories with RepositoryWorkspace`
-3. `feat: normalize failures into structured RepairRequest and FailureEvidence`
-4. `feat: implement evidence-based Python fault localization`
-5. `feat: build repository-aware context retrieval`
-6. `refactor: introduce structured PatchProposal and unified diff generation`
-7. `feat: validate generated patches before execution`
-8. `security: add isolated Docker sandbox for candidate validation`
-9. `feat: add auditable repair event trace and RepairReport`
-10. `feat: integrate GitHub issue and CI failure workflows`
-11. `feat: generate reviewed candidate fixes as draft pull requests`
-12. `benchmark: establish reproducible repair evaluation and v0.1 release criteria`
+1. [#1 — chore: establish open-source engineering foundation](https://github.com/w0NDfu/auto-bug-fix/issues/1)
+2. [#2 — feat: support arbitrary local repositories with RepositoryWorkspace](https://github.com/w0NDfu/auto-bug-fix/issues/2)
+3. [#3 — feat: normalize failures into structured RepairRequest and FailureEvidence](https://github.com/w0NDfu/auto-bug-fix/issues/3)
+4. [#4 — feat: implement evidence-based Python fault localization](https://github.com/w0NDfu/auto-bug-fix/issues/4)
+5. [#5 — feat: build repository-aware context retrieval](https://github.com/w0NDfu/auto-bug-fix/issues/5)
+6. [#6 — refactor: introduce structured PatchProposal and unified diff generation](https://github.com/w0NDfu/auto-bug-fix/issues/6)
+7. [#7 — feat: validate generated patches before execution](https://github.com/w0NDfu/auto-bug-fix/issues/7)
+8. [#8 — security: add isolated Docker sandbox for candidate validation](https://github.com/w0NDfu/auto-bug-fix/issues/8)
+9. [#9 — feat: add auditable repair event trace and RepairReport](https://github.com/w0NDfu/auto-bug-fix/issues/9)
+10. [#10 — feat: integrate GitHub issue and CI failure workflows](https://github.com/w0NDfu/auto-bug-fix/issues/10)
+11. [#11 — feat: generate reviewed candidate fixes as draft pull requests](https://github.com/w0NDfu/auto-bug-fix/issues/11)
+12. [#12 — benchmark: establish reproducible repair evaluation and v0.1 release criteria](https://github.com/w0NDfu/auto-bug-fix/issues/12)
