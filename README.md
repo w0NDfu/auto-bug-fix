@@ -19,6 +19,8 @@ the target repository-level and sandboxed workflow is roadmap work.
 - Installable package and `autobugfix --help` CLI foundation.
 - Read-only inspection of an existing local Git repository with
   `autobugfix inspect-repo`.
+- Offline normalization of bounded traceback, pytest, and raw failure evidence
+  with `autobugfix inspect-failure`.
 
 ## How it works today
 
@@ -82,6 +84,30 @@ worktree dirty state is intentionally reported as unknown because inspection
 does not execute Git worktree-content filters. Repository-level autonomous
 repair is not implemented.
 
+## Failure evidence inspection
+
+Issue #3 adds a deterministic, offline normalization boundary for Python
+tracebacks, pytest output, and raw failure logs:
+
+```bash
+autobugfix inspect-failure --log 'ValueError: invalid input' --json
+```
+
+The result contains serializable `RepairRequest`, `FailureEvidence`,
+`StackFrame`, and `SourceLocation` data. Logs and optional issue text are
+bounded and treated as hostile input: malformed UTF-8, oversized input, empty
+input, and terminal control characters return structured validation errors.
+Traceback frames are recognized only inside an explicit Python traceback
+section; an indented line immediately following a frame is retained as its
+source excerpt, while exception summaries, separators, blank lines, and other
+log lines are not. Traceback exception summaries preserve custom exception
+class names, including chained summaries in observed order. Pytest and raw-log
+classification remains conservative and does not upgrade a stray `File ...`
+line into traceback evidence.
+The normalizer never executes log content, reads repositories, calls a
+provider, or makes network requests. Issue text is kept separate from factual
+failure observations; root-cause inference and repair remain future work.
+
 ## Planned architecture
 
 The target flow is structured failure evidence -> repository context -> minimal
@@ -91,8 +117,9 @@ See [docs/architecture-v2.md](docs/architecture-v2.md) and
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md). RepositoryWorkspace inspection is the current
-Issue #2 milestone; Issues #3–#12 remain future work.
+See [ROADMAP.md](ROADMAP.md). RepositoryWorkspace inspection and offline Issue
+#3 failure evidence normalization are implemented; Issues #4–#12 remain future
+work.
 
 ## Development
 

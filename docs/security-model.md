@@ -31,6 +31,12 @@ safe. The source-file limit bounds eligible Python files, but total directory
 traversal entries and scan time are not yet governed by a separate global
 budget.
 
+The Issue #3 failure normalizer is a separate offline boundary. It accepts
+bounded UTF-8 text, rejects malformed/oversized/control-character input, and
+parses traceback and test-output facts without executing the input or making
+network/provider calls. Optional issue text remains separate from observed
+failure evidence. It does not infer root causes or apply repairs.
+
 ## TARGET SECURITY MODEL
 
 The target repair engine will:
