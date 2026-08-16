@@ -61,7 +61,7 @@ class RepositoryState:
     base_commit: str | None
     branch: str | None
     detached_head: bool
-    is_dirty: bool
+    is_dirty: bool | None
 
 
 @dataclass(frozen=True)
@@ -81,7 +81,7 @@ class WorkspaceSummary:
     base_commit: str | None
     branch: str | None
     detached_head: bool
-    is_dirty: bool
+    is_dirty: bool | None
     eligible_python_files: int
     ignored_entries: int
     warnings: tuple[str, ...] = field(default_factory=tuple)
@@ -167,19 +167,12 @@ class RepositoryWorkspace:
 
         base_commit = cls._git_value(root, "rev-parse", "HEAD", allow_failure=True)
         branch = cls._git_value(root, "symbolic-ref", "--quiet", "--short", "HEAD", allow_failure=True)
-        status = cls._run_git(
-            root,
-            "status",
-            "--porcelain",
-            "--untracked-files=normal",
-            "--ignore-submodules=all",
-        )
         state = RepositoryState(
             is_git_repository=True,
             base_commit=base_commit or None,
             branch=branch or None,
             detached_head=not bool(branch),
-            is_dirty=bool(status.strip()),
+            is_dirty=None,
         )
         return cls(root, state, policy or WorkspacePolicy())
 
@@ -425,13 +418,18 @@ def format_summary(summary: WorkspaceSummary) -> str:
     """Render a concise human-readable inspection summary."""
 
     head = summary.base_commit or "unavailable"
-    state = "dirty" if summary.is_dirty else "clean"
     branch = "detached HEAD" if summary.detached_head else (summary.branch or "unknown branch")
     lines = [
         f"Repository root: {summary.root}",
         f"Git root: {summary.git_root}",
         f"HEAD: {head}",
-        f"State: {state} ({branch})",
+        f"Branch state: {branch}",
+        (
+            "Worktree state: unknown "
+            "(safe inspection does not execute Git content filters)"
+            if summary.is_dirty is None
+            else f"Worktree state: {'dirty' if summary.is_dirty else 'clean'}"
+        ),
         f"Eligible Python files: {summary.eligible_python_files}",
         f"Ignored entries: {summary.ignored_entries}",
     ]

@@ -61,7 +61,7 @@ def test_repository_root_nested_path_file_and_head(tmp_path):
     assert workspace.root == repository.resolve()
     assert workspace.base_commit == expected_head
     assert workspace.state.is_git_repository is True
-    assert workspace.state.is_dirty is False
+    assert workspace.state.is_dirty is None
     assert workspace.relative_path(repository / "src" / "main.py") == "src/main.py"
 
 
@@ -75,13 +75,14 @@ def test_non_git_and_missing_paths_are_actionable(tmp_path):
         RepositoryWorkspace.open(tmp_path / "missing")
 
 
-def test_git_state_reports_dirty_repository(tmp_path):
+def test_git_state_reports_unknown_worktree_state(tmp_path):
     repository = make_repository(tmp_path)
+    assert RepositoryWorkspace.open(repository).state.is_dirty is None
     (repository / "dirty.py").write_text("dirty = True\n", encoding="utf-8")
 
     workspace = RepositoryWorkspace.open(repository)
 
-    assert workspace.state.is_dirty is True
+    assert workspace.state.is_dirty is None
 
 
 def test_git_state_reports_detached_head(tmp_path):
@@ -133,7 +134,7 @@ def test_read_text_is_utf8_bounded_and_read_only(tmp_path):
     assert after == before
 
 
-def test_git_status_does_not_rewrite_index_after_tracked_mtime_change(tmp_path):
+def test_inspection_does_not_rewrite_index_after_tracked_mtime_change(tmp_path):
     repository = make_repository(tmp_path)
     index = repository / ".git" / "index"
     tracked = repository / "src" / "main.py"
@@ -151,6 +152,32 @@ def test_git_status_does_not_rewrite_index_after_tracked_mtime_change(tmp_path):
     assert index.read_bytes() == index_before
     assert index_stat_after.st_mtime_ns == index_stat_before.st_mtime_ns
     assert index_stat_after.st_size == index_stat_before.st_size
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX clean-filter test")
+def test_repository_clean_filter_is_not_executed_during_inspection(tmp_path):
+    repository = make_repository(tmp_path)
+    attributes = repository / ".gitattributes"
+    attributes.write_text("*.py filter=evil\n", encoding="utf-8")
+    run_git(repository, "add", ".gitattributes")
+    run_git(repository, "commit", "-m", "configure filter attributes")
+    marker = tmp_path / "clean-filter-ran"
+    filter_command = tmp_path / "evil-clean-filter.sh"
+    filter_command.write_text(
+        "#!/bin/sh\n"
+        f"printf ran > {shlex.quote(str(marker))}\n"
+        "cat\n",
+        encoding="utf-8",
+    )
+    filter_command.chmod(0o755)
+    run_git(repository, "config", "filter.evil.clean", str(filter_command))
+    run_git(repository, "config", "filter.evil.smudge", "cat")
+    (repository / "src" / "main.py").write_text("VALUE = 999\n", encoding="utf-8")
+
+    summary = RepositoryWorkspace.open(repository).summary()
+
+    assert summary.is_dirty is None
+    assert not marker.exists()
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX fsmonitor hook test")
@@ -289,7 +316,11 @@ def test_cli_inspect_repo_json_and_invalid_repository(tmp_path, capsys):
     assert main(["inspect-repo", str(repository), "--json"]) == 0
     output = json.loads(capsys.readouterr().out)
     assert output["eligible_python_files"] == 2
+    assert output["is_dirty"] is None
     assert output["root"] == str(repository.resolve())
+
+    assert main(["inspect-repo", str(repository)]) == 0
+    assert "Worktree state: unknown" in capsys.readouterr().out
 
     assert main(["inspect-repo", str(tmp_path / "not-a-repository")]) == 2
     assert "does not exist" in capsys.readouterr().err

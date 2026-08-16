@@ -76,9 +76,11 @@ autobugfix inspect-repo /path/to/repository --json
 ```
 
 This command is inspection-only. It accepts a repository root, nested path, or
-file inside an existing Git repository and reports its root, HEAD, Git state,
-eligible Python-file count, ignored entries, and warnings. Repository-level
-autonomous repair is not implemented.
+file inside an existing Git repository and reports its root, HEAD, branch
+state, eligible Python-file count, ignored entries, and warnings. Exact
+worktree dirty state is intentionally reported as unknown because inspection
+does not execute Git worktree-content filters. Repository-level autonomous
+repair is not implemented.
 
 ## Planned architecture
 

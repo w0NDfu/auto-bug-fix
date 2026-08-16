@@ -19,8 +19,11 @@ The Issue #2 RepositoryWorkspace layer now provides a narrower inspection
 boundary: Git root resolution, bounded deterministic Python enumeration,
 path-aware containment checks, symlink target checks, conservative sensitive
 file exclusions, UTF-8 reads, file/file-count limits, and read-only Git-state
-inspection. Git commands use explicit working directories, captured output,
-timeouts, and no shell execution.
+inspection. It does not use git status, git diff-files, or another worktree
+content-comparison command. Git metadata commands use explicit working
+directories, captured output, timeouts, no shell execution, and per-process
+fsmonitor/untracked-cache/optional-lock protections. Exact worktree dirty state
+is therefore reported as unknown rather than guessed.
 
 These controls protect inspection operations only. They do not validate patches,
 run repository tests, isolate processes, or make the existing MVP repair loop
