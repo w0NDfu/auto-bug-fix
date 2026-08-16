@@ -1,32 +1,87 @@
-# Auto-Bug-Fix LLM (Multi-Agent with Reflection)
+# Auto-Bug-Fix
 
-A runnable MVP that integrates LLMs into a multi-agent, closed-loop debugging system.
+Auto-Bug-Fix is an evolving open-source project for safe, auditable,
+repository-level bug repair. It began as an educational multi-agent MVP and is
+being developed incrementally toward a framework that proposes and validates
+minimal fixes while keeping humans in control of merges.
 
-## Features
-- Planner / Locator / Retriever / Coder / Tester / Reflector agents
-- AST call graph (basic) + TF-IDF retriever (RAG-lite)
-- Pluggable LLM providers: OpenAI-compatible, DeepSeek-compatible, or Mock
-- Reflection loop: test -> error -> LLM-guided fix -> re-test
-- FastAPI service
+## Status
 
-## Quick Start
+Early-stage foundation work. The current implementation is a fixed-demo MVP;
+the target repository-level and sandboxed workflow is roadmap work.
+
+## Current capabilities
+
+- FastAPI `POST /fix` endpoint for the historical demo pipeline.
+- Planner, locator, retriever, coder, tester, reflector, and validator modules.
+- Deterministic mock provider and optional OpenAI-compatible provider.
+- Basic Python AST and TF-IDF utilities retained from the MVP.
+- Installable package and `autobugfix --help` CLI foundation.
+
+## How it works today
+
+The MVP accepts a failure log, uses heuristic localization against the bundled
+`repo/` demo, retrieves text with TF-IDF, asks a provider for a free-form patch
+and tests, then repeats after a reflection hint. This is not arbitrary-repository
+repair and generated tests run on the host.
+
+## Installation
 
 ```bash
-pip install -r requirements.txt
-export LLM_PROVIDER=mock   # or: openai / deepseek
-export OPENAI_API_KEY=your_key   # if using openai-compatible
-uvicorn backend.main:app --reload
+python -m pip install -e .
 ```
 
-Test:
+## Quick start
+
+Use the explicit MVP command with the offline provider:
+
 ```bash
-curl -X POST http://127.0.0.1:8000/fix -H "Content-Type: application/json" -d '{"log":"ZeroDivisionError: division by zero"}'
+set LLM_PROVIDER=mock
+autobugfix mvp-fix --log "ZeroDivisionError: division by zero"
 ```
 
-## Switch Provider
-- mock: no external calls, deterministic patch
-- openai: set OPENAI_API_KEY and optionally OPENAI_BASE_URL
-- deepseek: set OPENAI_API_KEY and OPENAI_BASE_URL to DeepSeek endpoint
+The FastAPI demo remains available with `uvicorn backend.main:app --reload`.
+The `openai` provider requires credentials and may make external requests.
 
-## Project Structure
-See folders under backend/ and repo/.
+## Mock / offline mode
+
+The default mock provider makes no LLM network request and is the required mode
+for tests. It only covers the bundled zero-division demonstration.
+
+## Safety
+
+The current MVP is not a sandbox and must not be treated as safe for untrusted
+code. It can execute generated tests through host `pytest`. Do not provide
+secrets to generated code. Network-disabled Docker execution, structured patch
+validation, and audit reports are planned, not implemented.
+
+## Planned architecture
+
+The target flow is structured failure evidence -> repository context -> minimal
+`PatchProposal` -> deterministic validation -> isolated sandbox -> `RepairReport`.
+See [docs/architecture-v2.md](docs/architecture-v2.md) and
+[docs/security-model.md](docs/security-model.md).
+
+## Roadmap
+
+See [ROADMAP.md](ROADMAP.md). Issues #2–#12 remain future work after the OSS
+foundation milestone.
+
+## Development
+
+```bash
+python -m pip install -e .
+pytest
+ruff check .
+mypy autobugfix
+autobugfix --help
+```
+
+## Contributing and security
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md), [AGENTS.md](AGENTS.md), and
+[SECURITY.md](SECURITY.md) before changing the project.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

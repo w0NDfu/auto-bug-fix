@@ -1,4 +1,4 @@
-from service import process
+from .service import process
 
 def handler(a, b):
     return process(a, b)
