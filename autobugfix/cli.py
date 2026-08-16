@@ -8,8 +8,10 @@ import sys
 from typing import Sequence
 
 from . import __version__
+from .domain.location import LocalizationLimits
 from .evidence import EvidenceValidationError
 from .failure_normalizer import normalize_failure
+from .localization import PythonFaultLocalizer
 from .workspace import RepositoryWorkspace, WorkspaceError, format_summary
 
 
@@ -40,6 +42,13 @@ def build_parser() -> argparse.ArgumentParser:
     failure.add_argument("--issue-text", help="optional maintainer issue text kept separate from observations")
     failure.add_argument("--source", default="auto", help="evidence source label, or auto (default)")
     failure.add_argument("--json", action="store_true", help="emit deterministic JSON output")
+    localize = subparsers.add_parser(
+        "localize",
+        help="rank repository-local Python locations from failure evidence without executing code",
+    )
+    localize.add_argument("--repo", required=True, help="repository root, nested path, or file")
+    localize.add_argument("--log", required=True, help="traceback or failure log")
+    localize.add_argument("--json", action="store_true", help="emit deterministic JSON output")
     return parser
 
 
@@ -73,6 +82,22 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(request.to_json(), end="")
         else:
             print(json.dumps(request.to_dict(), indent=2, sort_keys=True))
+    elif args.command == "localize":
+        try:
+            workspace = RepositoryWorkspace.open(args.repo)
+            request = normalize_failure(args.log)
+            result = PythonFaultLocalizer(workspace, LocalizationLimits()).localize(request.evidence)
+        except (WorkspaceError, EvidenceValidationError) as exc:
+            payload = exc.to_dict() if isinstance(exc, EvidenceValidationError) else {"error": str(exc)}
+            print(json.dumps(payload, indent=2, sort_keys=True), file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result.to_dict(), indent=2, sort_keys=True))
+        else:
+            for candidate in result.candidates:
+                print(f"{candidate.rank}. {candidate.relative_path}:{candidate.line_start}-{candidate.line_end}")
+            if not result.candidates:
+                print("No repository-local Python candidates found.")
     else:
         build_parser().print_help()
     return 0

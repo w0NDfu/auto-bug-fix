@@ -37,6 +37,14 @@ parses traceback and test-output facts without executing the input or making
 network/provider calls. Optional issue text remains separate from observed
 failure evidence. It does not infer root causes or apply repairs.
 
+The Issue #4 Python localizer adds another inspection-only boundary. Traceback
+paths are mapped lexically to the bounded `RepositoryWorkspace` file index;
+external or ambiguous paths are not read. Candidate source is read only via
+`RepositoryWorkspace.read_text()` and parsed with `ast.parse`, never imported
+or executed. Processing is bounded and deterministic. Localization evidence
+does not establish a root cause and is not connected to patch generation or
+repair orchestration.
+
 ## TARGET SECURITY MODEL
 
 The target repair engine will:

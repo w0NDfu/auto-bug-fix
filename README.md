@@ -21,6 +21,8 @@ the target repository-level and sandboxed workflow is roadmap work.
   `autobugfix inspect-repo`.
 - Offline normalization of bounded traceback, pytest, and raw failure evidence
   with `autobugfix inspect-failure`.
+- Deterministic, evidence-based ranking of repository-local Python locations
+  with `autobugfix localize` (inspection only).
 
 ## How it works today
 
@@ -33,6 +35,11 @@ Repository inspection is a separate foundation capability. It resolves a local
 Git root, records basic Git state, enumerates bounded UTF-8 Python files, and
 supports contained reads. It does not send a repository to an LLM, execute
 repository code, generate a patch, or repair the repository.
+
+Python fault localization is traceback/evidence driven and records bounded
+candidate locations plus AST structure. It is not semantic root-cause proof,
+does not integrate with repair, generate patches, execute target code, or
+retrieve Issue #5 repository context.
 
 ## Installation
 
@@ -118,8 +125,18 @@ See [docs/architecture-v2.md](docs/architecture-v2.md) and
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md). RepositoryWorkspace inspection and offline Issue
-#3 failure evidence normalization are implemented; Issues #4–#12 remain future
-work.
+#3 failure evidence normalization and Issue #4 Python fault localization are
+implemented; Issues #5–#12 remain future work.
+
+## Localize Python failure evidence
+
+```bash
+autobugfix localize --repo /path/to/repository --log 'Traceback (most recent call last): ...' --json
+```
+
+The command ranks only safely mapped repository-local Python candidates. It
+never reads an external traceback path, imports or executes source, calls a
+provider, generates a patch, or claims a confirmed root cause.
 
 ## Development
 

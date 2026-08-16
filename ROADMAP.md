@@ -18,8 +18,9 @@ Proper package and CLI, CI, `RepositoryWorkspace`, structured failure evidence,
 basic evidence-based Python localization, `PatchProposal`, deterministic
 validation, and an audit-ready domain model. The current Issue #2 increment
 delivers read-only local repository inspection; Issue #3 adds offline
-structured failure evidence normalization, while repair integration remains
-future work.
+structured failure evidence normalization; Issue #4 adds bounded,
+evidence-based Python localization, while repair integration remains future
+work.
 
 ### Stage C — Safe v0.2 repair engine
 

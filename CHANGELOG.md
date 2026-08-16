@@ -10,4 +10,6 @@ All notable changes to Auto-Bug-Fix are documented here.
   repositories, with bounded Python enumeration and containment safeguards.
 - Added bounded, offline `inspect-failure` normalization for Issue #3 with
   serializable failure evidence models and hostile-input validation.
+- Added inspection-only Issue #4 Python fault localization with bounded AST
+  candidates, deterministic ranking, and hostile traceback-path handling.
 
