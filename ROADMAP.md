@@ -33,22 +33,22 @@ interfaces, benchmark suite, release process, and contributor documentation.
 ```text
 #1 OSS foundation
  |\
- | +--> #2 RepositoryWorkspace
- +----> #3 FailureEvidence
-          \       /
-           +--> #4 Fault localization
-                    -> #5 Context retrieval
-                    -> #6 PatchProposal
-                    -> #7 Patch validation
-                    -> #8 Sandbox
-                    -> #9 Audit trace / RepairReport
-                    -> #10 GitHub workflow
-                    -> #11 Draft PR
-                    -> #12 Benchmark + release
+ | +--> #2 RepositoryWorkspace --+
+ +----> #3 FailureEvidence -----+--> #4 Fault localization
+                                      -> #5 Context retrieval
+                                      -> #6 PatchProposal
+                                      -> #7 Patch validation --+--> #8 Sandbox
+                                                               |      -> #9 Audit trace / RepairReport
+                                                               |             -> #10 GitHub workflow
+                                                               |                    -> #11 Draft PR
+                                                               +--> #12 Benchmark + quality gates
 ```
 
 Dependencies guide sequencing but do not prohibit parallel work when an issue
-can be implemented independently.
+can be implemented independently. Issue numbers do not imply a strict
+implementation order. In particular, benchmark and quality-gate work can
+begin once the core workspace/evidence/patch/validation pipeline is measurable
+and does not require the GitHub Draft PR workflow.
 
 ## Roadmap issues
 
@@ -65,4 +65,4 @@ The twelve substantive milestones are tracked in GitHub:
 9. [#9 — feat: add auditable repair event trace and RepairReport](https://github.com/w0NDfu/auto-bug-fix/issues/9)
 10. [#10 — feat: integrate GitHub issue and CI failure workflows](https://github.com/w0NDfu/auto-bug-fix/issues/10)
 11. [#11 — feat: generate reviewed candidate fixes as draft pull requests](https://github.com/w0NDfu/auto-bug-fix/issues/11)
-12. [#12 — benchmark: establish reproducible repair evaluation and v0.1 release criteria](https://github.com/w0NDfu/auto-bug-fix/issues/12)
+12. [#12 — benchmark: establish reproducible repair evaluation and release quality gates](https://github.com/w0NDfu/auto-bug-fix/issues/12)

@@ -36,6 +36,7 @@ python -m pip install -e .
 Use the explicit MVP command with the offline provider:
 
 ```bash
+python -m pip install -e ".[dev]"
 set LLM_PROVIDER=mock
 autobugfix mvp-fix --log "ZeroDivisionError: division by zero"
 ```
@@ -70,12 +71,17 @@ foundation milestone.
 ## Development
 
 ```bash
-python -m pip install -e .
-pytest
+python -m pip install -e ".[dev]"
+python -m pytest
 ruff check .
 mypy autobugfix
 autobugfix --help
+autobugfix --version
 ```
+
+The Ruff foundation gate intentionally excludes the historical `backend/` and
+demo `repo/` trees; this is documented in [CONTRIBUTING.md](CONTRIBUTING.md)
+and is not a claim of full-repository lint coverage.
 
 ## Contributing and security
 

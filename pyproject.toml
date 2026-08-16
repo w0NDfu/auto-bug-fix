@@ -14,10 +14,16 @@ dependencies = [
   "fastapi>=0.95",
   "openai>=1.0",
   "pydantic>=1.10,<3",
-  "pytest>=7",
   "requests>=2",
   "scikit-learn>=1.2",
   "uvicorn>=0.20",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.8",
+  "pytest>=7",
+  "ruff>=0.4",
 ]
 
 [project.scripts]
@@ -34,6 +40,8 @@ addopts = "-q"
 target-version = "py310"
 line-length = 100
 exclude = [".git", ".venv", "build", "dist"]
+# The historical backend/ and repo/ trees are intentionally excluded from the
+# foundation lint pass; see CONTRIBUTING.md and docs/mvp-baseline.md.
 extend-exclude = ["backend", "repo"]
 
 [tool.ruff.lint]
