@@ -97,6 +97,13 @@ The result contains serializable `RepairRequest`, `FailureEvidence`,
 `StackFrame`, and `SourceLocation` data. Logs and optional issue text are
 bounded and treated as hostile input: malformed UTF-8, oversized input, empty
 input, and terminal control characters return structured validation errors.
+Traceback frames are recognized only inside an explicit Python traceback
+section; an indented line immediately following a frame is retained as its
+source excerpt, while exception summaries, separators, blank lines, and other
+log lines are not. Traceback exception summaries preserve custom exception
+class names, including chained summaries in observed order. Pytest and raw-log
+classification remains conservative and does not upgrade a stray `File ...`
+line into traceback evidence.
 The normalizer never executes log content, reads repositories, calls a
 provider, or makes network requests. Issue text is kept separate from factual
 failure observations; root-cause inference and repair remain future work.

@@ -15,10 +15,17 @@ from .evidence import (
 
 _TRACEBACK_HEADER = "Traceback (most recent call last):"
 _FRAME_RE = re.compile(r'^\s*File ["\'](?P<file>.+?)["\'], line (?P<line>\d+)(?:, in (?P<function>.*))?\s*$')
-_ERROR_RE = re.compile(
+_EXCEPTION_SUMMARY_RE = re.compile(
+    r"^(?P<type>[A-Za-z_][\w.]*)\s*(?::\s*(?P<message>.*))?\s*$"
+)
+_RAW_ERROR_RE = re.compile(
     r"^\s*(?:E\s+)?(?P<type>[A-Za-z_][\w.]*(?:Error|Exception|Exit|Warning))(?::\s*(?P<message>.*))?\s*$"
 )
 _PYTEST_FAILED_RE = re.compile(r"^\s*FAILED\s+(?P<test>\S+?)(?:\s+-\s+(?P<message>.*))?\s*$")
+_CHAIN_SEPARATOR = (
+    "During handling of the above exception, another exception occurred:",
+    "The above exception was the direct cause of the following exception:",
+)
 _ALLOWED_CONTROL_CHARS = {"\n", "\r", "\t"}
 
 
@@ -53,17 +60,25 @@ def normalize_failure(
             f"input contains {len(lines)} lines; maximum is {active_limits.max_lines}",
             details={"actual": len(lines), "maximum": active_limits.max_lines},
         )
-    frames = _parse_frames(lines, active_limits)
-    messages = _parse_messages(lines)
+    has_traceback = any(line.strip() == _TRACEBACK_HEADER for line in lines)
+    frames, traceback_messages = _parse_traceback(lines, active_limits)
+    messages = _parse_messages(lines, include_error_messages=not has_traceback)
     detected_source = _detect_source(lines) if normalized_source == "auto" else normalized_source
-    parser = "python-traceback" if frames else ("pytest" if detected_source == "pytest" else "raw")
-    confidence = 1.0 if frames else (0.8 if detected_source == "pytest" else 0.2)
+    parser = "python-traceback" if has_traceback else ("pytest" if detected_source == "pytest" else "raw")
+    confidence = (
+        1.0 if frames else 0.7
+        if has_traceback
+        else 0.8
+        if detected_source == "pytest"
+        else 0.2
+    )
+    ordered_messages = _merge_messages(lines, traceback_messages, messages)
     excerpts = _excerpts(lines, active_limits.max_excerpt_chars)
     evidence = FailureEvidence(
         source=detected_source,
         raw_log=normalized_log,
         frames=tuple(frames),
-        message=messages[-1] if messages else None,
+        message=ordered_messages[-1] if ordered_messages else None,
         excerpts=tuple(excerpts),
         parser=parser,
         parser_confidence=confidence,
@@ -166,45 +181,93 @@ def _validate_text(
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
-def _parse_frames(lines: list[str], limits: EvidenceLimits) -> list[StackFrame]:
+def _parse_traceback(lines: list[str], limits: EvidenceLimits) -> tuple[list[StackFrame], list[str]]:
     frames: list[StackFrame] = []
+    messages: list[str] = []
+    in_traceback = False
     for index, line in enumerate(lines):
-        match = _FRAME_RE.match(line)
-        if match is None:
+        if line.strip() == _TRACEBACK_HEADER:
+            in_traceback = True
             continue
-        excerpt = _next_code_line(lines, index, limits.max_excerpt_chars)
-        frames.append(
-            StackFrame(
-                location=SourceLocation(file=match.group("file"), line=int(match.group("line"))),
-                function=match.group("function") or None,
-                excerpt=excerpt,
+        if not in_traceback:
+            continue
+        if line.strip() in _CHAIN_SEPARATOR:
+            in_traceback = False
+            continue
+        match = _FRAME_RE.match(line)
+        if match is not None:
+            frames.append(
+                StackFrame(
+                    location=SourceLocation(file=match.group("file"), line=int(match.group("line"))),
+                    function=match.group("function") or None,
+                    excerpt=_next_code_line(lines, index, limits.max_excerpt_chars),
+                )
             )
-        )
-    return frames
+            continue
+        if not line.strip() or line[:1].isspace():
+            continue
+        summary = _EXCEPTION_SUMMARY_RE.match(line)
+        if summary is not None:
+            error_type = summary.group("type")
+            message = summary.group("message") or ""
+            messages.append(f"{error_type}: {message}".rstrip())
+            in_traceback = False
+    return frames, messages
 
 
 def _next_code_line(lines: list[str], index: int, maximum: int) -> str | None:
     if index + 1 >= len(lines):
         return None
-    candidate = lines[index + 1].strip()
-    if not candidate or candidate.startswith("File "):
+    raw_candidate = lines[index + 1]
+    candidate = raw_candidate.strip()
+    if (
+        not candidate
+        or not raw_candidate[:1].isspace()
+        or len(raw_candidate) - len(raw_candidate.lstrip()) < 4
+        or candidate.startswith("File ")
+        or candidate == _TRACEBACK_HEADER
+        or candidate in _CHAIN_SEPARATOR
+        or _PYTEST_FAILED_RE.match(candidate)
+    ):
         return None
     return candidate[:maximum]
 
 
-def _parse_messages(lines: list[str]) -> list[str]:
+def _parse_messages(lines: list[str], *, include_error_messages: bool) -> list[str]:
     messages: list[str] = []
     for line in lines:
-        match = _ERROR_RE.match(line)
-        if match:
-            error_type = match.group("type")
-            message = match.group("message") or ""
-            messages.append(f"{error_type}: {message}".rstrip())
-            continue
+        if include_error_messages:
+            match = _RAW_ERROR_RE.match(line)
+            if match:
+                error_type = match.group("type")
+                message = match.group("message") or ""
+                messages.append(f"{error_type}: {message}".rstrip())
+                continue
         failed = _PYTEST_FAILED_RE.match(line)
         if failed and failed.group("message"):
             messages.append(f"pytest failure: {failed.group('message')}")
     return messages
+
+
+def _merge_messages(lines: list[str], traceback_messages: list[str], pytest_messages: list[str]) -> list[str]:
+    """Return observed summaries in input order without inferring causes."""
+
+    if not traceback_messages:
+        return pytest_messages
+    ordered: list[str] = []
+    traceback_index = 0
+    pytest_index = 0
+    for line in lines:
+        if line.strip() in traceback_messages and traceback_index < len(traceback_messages):
+            ordered.append(traceback_messages[traceback_index])
+            traceback_index += 1
+        failed = _PYTEST_FAILED_RE.match(line)
+        if failed and failed.group("message") and pytest_index < len(pytest_messages):
+            ordered.append(pytest_messages[pytest_index])
+            pytest_index += 1
+    ordered.extend(traceback_messages[traceback_index:])
+    ordered.extend(pytest_messages[pytest_index:])
+    return ordered
 
 
 def _detect_source(lines: list[str]) -> str:

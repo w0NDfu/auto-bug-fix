@@ -42,6 +42,66 @@ def test_chained_tracebacks_keep_all_frames_and_last_observed_error():
 
     assert [frame.location.file for frame in request.evidence.frames] == ["a.py", "b.py"]
     assert request.evidence.message == "RuntimeError: second"
+    assert all(frame.excerpt is None for frame in request.evidence.frames)
+
+
+def test_traceback_frame_without_source_excerpt_does_not_capture_exception_line():
+    request = normalize_failure(
+        'Traceback (most recent call last):\n  File "a.py", line 1, in f\nValueError: bad\n'
+    )
+
+    assert request.evidence.frames[0].excerpt is None
+    assert request.evidence.message == "ValueError: bad"
+
+
+def test_traceback_keeps_real_indented_source_excerpt():
+    request = normalize_failure(
+        'Traceback (most recent call last):\n  File "a.py", line 1, in f\n    explode()\nValueError: bad\n'
+    )
+
+    assert request.evidence.frames[0].excerpt == "explode()"
+
+
+def test_custom_exception_name_is_preserved_in_traceback_context():
+    request = normalize_failure(
+        'Traceback (most recent call last):\n  File "a.py", line 1, in run\n'
+        '    raise MyProjectFailure("broken")\nMyProjectFailure: broken\n'
+    )
+
+    assert request.evidence.message == "MyProjectFailure: broken"
+
+
+def test_malformed_frame_is_not_a_stack_frame_and_does_not_crash():
+    request = normalize_failure(
+        'Traceback (most recent call last):\nFile "broken.py", line not-a-number, in bad\n'
+        'MyProjectFailure: broken\n'
+    )
+
+    assert request.evidence.frames == ()
+    assert request.evidence.message == "MyProjectFailure: broken"
+
+
+def test_traceback_header_can_preserve_summary_without_valid_frames():
+    request = normalize_failure(
+        'Traceback (most recent call last):\nMyProjectFailure: broken\n'
+    )
+
+    assert request.evidence.frames == ()
+    assert request.evidence.raw_log.startswith("Traceback")
+    assert request.evidence.message == "MyProjectFailure: broken"
+
+
+def test_mixed_pytest_traceback_keeps_ordered_frames_and_observed_messages():
+    request = normalize_failure(
+        'FAILED tests/test_x.py::test_x - expected 1\n'
+        'Traceback (most recent call last):\n  File "x.py", line 2, in test_x\n'
+        'AssertionError: expected 1\n'
+    )
+
+    assert request.evidence.source == "traceback"
+    assert request.evidence.parser == "python-traceback"
+    assert [frame.location.file for frame in request.evidence.frames] == ["x.py"]
+    assert request.evidence.message == "AssertionError: expected 1"
 
 
 def test_pytest_and_raw_logs_are_bounded_evidence():
@@ -86,6 +146,21 @@ def test_serialization_is_deterministic_and_round_trips():
     assert restored == request
     assert serialized == request.to_json()
     assert json.loads(serialized)["issue_text"] == "issue text"
+
+
+def test_serialization_rejects_non_finite_confidence_and_invalid_source_lines():
+    request = normalize_failure("ValueError: bad")
+    payload = request.to_dict()
+    payload["evidence"]["parser_confidence"] = float("nan")
+    with pytest.raises(ValueError, match="parser_confidence"):
+        RepairRequest.from_json(json.dumps(payload))
+
+    payload = request.to_dict()
+    payload["evidence"]["frames"] = [
+        {"location": {"file": "a.py", "line": 0, "column": None}}
+    ]
+    with pytest.raises(ValueError, match="line"):
+        RepairRequest.from_dict(payload)
 
 
 def test_cli_inspection_is_offline_and_json_safe(capsys):

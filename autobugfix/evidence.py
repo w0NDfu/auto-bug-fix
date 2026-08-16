@@ -7,6 +7,7 @@ root cause, execute log content, or contact an external provider.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass
 from dataclasses import field as dataclass_field
 from typing import Any, Mapping
@@ -41,8 +42,8 @@ class SourceLocation:
     def from_dict(cls, value: Mapping[str, Any]) -> "SourceLocation":
         return cls(
             file=str(value["file"]),
-            line=_optional_int(value.get("line")),
-            column=_optional_int(value.get("column")),
+            line=_optional_positive_int(value.get("line"), "line"),
+            column=_optional_positive_int(value.get("column"), "column"),
         )
 
 
@@ -98,6 +99,9 @@ class FailureEvidence:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "FailureEvidence":
+        confidence = float(value.get("parser_confidence", 0.0))
+        if not math.isfinite(confidence) or not 0.0 <= confidence <= 1.0:
+            raise ValueError("parser_confidence must be finite and within [0.0, 1.0]")
         return cls(
             source=str(value["source"]),
             raw_log=str(value["raw_log"]),
@@ -105,7 +109,7 @@ class FailureEvidence:
             message=_optional_str(value.get("message")),
             excerpts=tuple(str(item) for item in value.get("excerpts", [])),
             parser=str(value.get("parser", "none")),
-            parser_confidence=float(value.get("parser_confidence", 0.0)),
+            parser_confidence=confidence,
         )
 
 
@@ -127,7 +131,7 @@ class RepairRequest:
         )
 
     def to_json(self) -> str:
-        return json.dumps(self.to_dict(), ensure_ascii=True, indent=2, sort_keys=True) + "\n"
+        return json.dumps(self.to_dict(), allow_nan=False, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
 
     @classmethod
     def from_json(cls, value: str) -> "RepairRequest":
@@ -160,10 +164,15 @@ class EvidenceValidationError(ValueError):
         }
 
 
-def _optional_int(value: Any) -> int | None:
+def _optional_positive_int(value: Any, field_name: str) -> int | None:
     if value is None:
         return None
-    return int(value)
+    if isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a positive integer")
+    converted = int(value)
+    if converted <= 0:
+        raise ValueError(f"{field_name} must be a positive integer")
+    return converted
 
 
 def _optional_str(value: Any) -> str | None:
