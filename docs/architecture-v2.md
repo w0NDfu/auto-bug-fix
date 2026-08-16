@@ -1,0 +1,54 @@
+# Auto-Bug-Fix architecture v2
+
+The target architecture keeps the useful multi-agent responsibilities while
+moving factual analysis and safety checks into typed, deterministic services.
+
+```text
+Issue / failure / CI error / traceback
+                 -> RepairRequest -> FailureEvidence
+RepositoryWorkspace -> localization + context retrieval
+                 -> ContextBuilder -> CodingAgent -> PatchProposal
+                 -> PatchValidator -> IsolatedSandbox
+                 -> ValidationResult -> RepairReport -> local CLI / draft PR
+```
+
+## Domain model direction
+
+The core will progressively introduce serializable models for
+`RepairRequest`, `FailureEvidence`, `StackFrame`, `SourceLocation`,
+`RepositoryWorkspace`, `RepositoryContext`, `ContextEvidence`,
+`PatchProposal`, `PatchFileChange`, `ValidationResult`, `RepairAttempt`,
+`RepairEvent`, and `RepairReport`. Models must remain independent of any one
+LLM vendor. Evidence and model inference must be represented separately, and
+generated changes must carry provenance.
+
+## Responsibilities
+
+- Planner decomposes a repair goal.
+- Locator ranks likely locations from traceback and repository evidence.
+- Retriever builds bounded repository context.
+- Coder proposes a minimal structured patch.
+- Validator checks paths, hashes, diff shape, and policy limits.
+- Tester runs approved candidates in an isolated runner.
+- Reflector explains failed validation and prepares a next attempt.
+
+These are responsibilities, not a requirement to add more agent classes. No
+manager, supervisor, router, or judge abstraction is planned without a concrete
+need.
+
+## Safety invariants
+
+The original repository is never modified before validation. Candidate patches
+are applied to an isolated workspace, generated changes are size-limited,
+binary changes are rejected by default, and every attempt emits an audit event.
+The production runner will disable network access and require explicit policy
+for credentials. Automatic merging is outside the product boundary.
+
+## Evolution
+
+The implementation proceeds from the educational MVP to an OSS foundation,
+then repository-level evidence and structured patches, deterministic
+validation, isolated execution, auditability, GitHub maintainer workflows, and
+finally reproducible evaluation. Current files do not yet implement the target
+architecture; see `ROADMAP.md` for staged work.
+

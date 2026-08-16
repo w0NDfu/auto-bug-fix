@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=58"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "auto-bug-fix"
+version = "0.1.0.dev0"
+description = "A safe, auditable foundation for repository-level bug repair."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [{ name = "Auto-Bug-Fix contributors" }]
+dependencies = [
+  "fastapi>=0.95",
+  "openai>=1.0",
+  "pydantic>=1.10,<3",
+  "requests>=2",
+  "scikit-learn>=1.2",
+  "uvicorn>=0.20",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.8",
+  "pytest>=7",
+  "ruff>=0.4",
+]
+
+[project.scripts]
+autobugfix = "autobugfix.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["autobugfix*", "backend*", "repo*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+exclude = [".git", ".venv", "build", "dist"]
+# The historical backend/ and repo/ trees are intentionally excluded from the
+# foundation lint pass; see CONTRIBUTING.md and docs/mvp-baseline.md.
+extend-exclude = ["backend", "repo"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["autobugfix"]
+follow_imports = "skip"
+check_untyped_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_unused_ignores = true
