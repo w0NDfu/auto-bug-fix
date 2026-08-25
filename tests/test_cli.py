@@ -10,7 +10,9 @@ from backend.llm.mock import MockLLM
 
 def test_cli_help(capsys):
     assert main([]) == 0
-    assert "mvp-fix" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "mvp-fix" in output
+    assert "codex-handoff" in output
 
 
 def test_package_version():

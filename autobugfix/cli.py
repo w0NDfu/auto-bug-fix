@@ -8,6 +8,7 @@ import sys
 from typing import Sequence
 
 from . import __version__
+from .codex_handoff import build_codex_handoff
 from .domain.location import LocalizationLimits
 from .evidence import EvidenceValidationError
 from .failure_normalizer import normalize_failure
@@ -18,7 +19,7 @@ from .workspace import RepositoryWorkspace, WorkspaceError, format_summary
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="autobugfix",
-        description="Auto-Bug-Fix: an evolving, auditable repository-repair framework.",
+        description="Auto-Bug-Fix: evidence and handoff for Codex-assisted repository repair.",
     )
     parser.add_argument("--version", action="version", version=__version__)
     subparsers = parser.add_subparsers(dest="command")
@@ -49,6 +50,15 @@ def build_parser() -> argparse.ArgumentParser:
     localize.add_argument("--repo", required=True, help="repository root, nested path, or file")
     localize.add_argument("--log", required=True, help="traceback or failure log")
     localize.add_argument("--json", action="store_true", help="emit deterministic JSON output")
+    handoff = subparsers.add_parser(
+        "codex-handoff",
+        help="build a bounded evidence package for Codex without invoking it",
+    )
+    handoff.add_argument("--repo", required=True, help="repository root, nested path, or file")
+    handoff.add_argument("--log", required=True, help="traceback or failure log")
+    handoff.add_argument("--issue-text", help="optional maintainer objective kept separate from evidence")
+    handoff.add_argument("--source", default="auto", help="evidence source label, or auto (default)")
+    handoff.add_argument("--json", action="store_true", help="emit deterministic JSON instead of Markdown")
     return parser
 
 
@@ -98,6 +108,23 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print(f"{candidate.rank}. {candidate.relative_path}:{candidate.line_start}-{candidate.line_end}")
             if not result.candidates:
                 print("No repository-local Python candidates found.")
+    elif args.command == "codex-handoff":
+        try:
+            workspace = RepositoryWorkspace.open(args.repo)
+            request = normalize_failure(
+                args.log,
+                issue_text=args.issue_text,
+                source=args.source,
+            )
+            handoff = build_codex_handoff(workspace, request)
+        except (WorkspaceError, EvidenceValidationError) as exc:
+            payload = exc.to_dict() if isinstance(exc, EvidenceValidationError) else {"error": str(exc)}
+            print(json.dumps(payload, indent=2, sort_keys=True), file=sys.stderr)
+            return 2
+        if args.json:
+            print(handoff.to_json(), end="")
+        else:
+            print(handoff.to_markdown(), end="")
     else:
         build_parser().print_help()
     return 0
