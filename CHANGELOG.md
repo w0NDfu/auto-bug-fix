@@ -12,4 +12,7 @@ All notable changes to Auto-Bug-Fix are documented here.
   serializable failure evidence models and hostile-input validation.
 - Added inspection-only Issue #4 Python fault localization with bounded AST
   candidates, deterministic ranking, and hostile traceback-path handling.
+- Expanded the project README with the current architecture, CLI workflows,
+  evidence/localization boundaries, security model, repository map, and
+  roadmap limitations.
 
