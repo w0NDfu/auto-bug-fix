@@ -7,12 +7,14 @@ Issues #2–#4 implement the first deterministic boundaries in this direction:
 `RepositoryWorkspace` can inspect an existing local Git repository, failure
 evidence is normalized offline, and Python traceback frames can be ranked as
 bounded candidate locations without connecting localization to the LLM repair
-loop.
+loop. `CodexHandoff` composes those observations into a task package for Codex
+without invoking Codex, selecting a model, or granting new permissions.
 
 ```text
 Issue / failure / CI error / traceback
                  -> RepairRequest -> FailureEvidence
 RepositoryWorkspace -> localization + context retrieval
+                 -> CodexHandoff -> Codex inspection + human-reviewed change
                  -> ContextBuilder -> CodingAgent -> PatchProposal
                  -> PatchValidator -> IsolatedSandbox
                  -> ValidationResult -> RepairReport -> local CLI / draft PR
@@ -46,6 +48,12 @@ The Issue #4 localizer is Python-only and evidence-based. Its ranked locations
 are explainable candidates, not semantic root-cause verdicts. It does not
 generate patches, execute repository code, or implement Issue #5 context
 retrieval.
+
+The Codex handoff is a boundary adapter, not a new repair orchestrator. It
+serializes repository metadata, `RepairRequest`, localization output, and an
+operating contract. Codex must still read `AGENTS.md`, inspect current state,
+request permissions through its own environment, run validation, and leave
+merge decisions to a human.
 
 ## Safety invariants
 

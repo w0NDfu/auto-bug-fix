@@ -15,4 +15,7 @@ All notable changes to Auto-Bug-Fix are documented here.
 - Expanded the project README with the current architecture, CLI workflows,
   evidence/localization boundaries, security model, repository map, and
   roadmap limitations.
+- Added a deterministic `codex-handoff` command that packages repository state,
+  failure evidence, localization candidates, and an untrusted-input contract
+  for interactive Codex or `codex exec` without invoking Codex automatically.
 

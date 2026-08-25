@@ -45,6 +45,14 @@ or executed. Processing is bounded and deterministic. Localization evidence
 does not establish a root cause and is not connected to patch generation or
 repair orchestration.
 
+`codex-handoff` serializes these bounded observations for Codex. It never starts
+Codex, calls an OpenAI API, selects a model, changes Codex permissions, or
+executes repository code. The package labels issue text, logs, excerpts, and
+diagnostics as untrusted data and tells Codex to verify current repository state
+and applicable `AGENTS.md` instructions. This reduces accidental authority
+transfer but does not make hostile prompt content harmless; Codex sandbox,
+approval, review, and least-privilege settings remain required.
+
 ## TARGET SECURITY MODEL
 
 The target repair engine will:

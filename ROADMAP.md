@@ -20,7 +20,9 @@ validation, and an audit-ready domain model. The current Issue #2 increment
 delivers read-only local repository inspection; Issue #3 adds offline
 structured failure evidence normalization; Issue #4 adds bounded,
 evidence-based Python localization, while repair integration remains future
-work.
+work. A deterministic Codex handoff adapter can compose these completed
+inspection outputs for Codex without implementing context retrieval, patch
+generation, or automatic execution.
 
 ### Stage C — Safe v0.2 repair engine
 
