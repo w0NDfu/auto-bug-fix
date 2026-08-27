@@ -92,6 +92,20 @@ failure log / traceback
         -> validation + human review
 ```
 
+The same boundary is easier to scan as a diagram:
+
+```mermaid
+flowchart LR
+    A["Failure log / CI traceback"] --> B["inspect-failure\nnormalize evidence"]
+    B --> C["RepairRequest +\nFailureEvidence"]
+    C --> D["inspect-repo\nread-only facts"]
+    D --> E["localize\nrank Python candidates"]
+    E --> F["codex-handoff\nbuild task package"]
+    F --> G["Codex inspection\nand implementation"]
+    G --> H["validation\nand human review"]
+    H -. "future roadmap" .-> I["PatchProposal +\nisolated runner"]
+```
+
 The future flow adds repository context, a structured patch proposal,
 deterministic validation, an isolated runner, and an audit-ready report.
 
@@ -154,6 +168,27 @@ select a model, start `codex`, modify the repository, or execute target code.
 Codex retains its own authentication, sandbox, approval, and review controls.
 This separation also makes the package usable in the desktop app, CLI, IDE, or
 CI without coupling Auto-Bug-Fix to one Codex release.
+
+### Which command should I use?
+
+```mermaid
+flowchart TD
+    Q{"What do you have?"}
+    Q -->|"failure text only"| F["inspect-failure"]
+    Q -->|"a local Git repository"| R["inspect-repo"]
+    Q -->|"failure text + repository"| L["localize"]
+    L --> H["codex-handoff"]
+    H --> X["interactive Codex\nor codex exec"]
+    M["historical demo only"] --> MVP["mvp-fix\nmock provider"]
+```
+
+| Goal | Start here | What you get |
+| --- | --- | --- |
+| Understand a traceback or CI failure | `inspect-failure` | Bounded, offline evidence |
+| Check what a repository contains | `inspect-repo` | Git facts and eligible files |
+| Find plausible Python locations | `localize` | Explainable ranked candidates |
+| Give Codex a grounded task | `codex-handoff` | Markdown or JSON handoff package |
+| Reproduce the original educational demo | `mvp-fix` | Historical mock-provider loop |
 
 Codex reads repository `AGENTS.md` instructions before work, so the generated
 contract tells it to re-read those rules, verify the current worktree, treat all
